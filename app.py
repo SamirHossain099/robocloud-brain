@@ -58,6 +58,9 @@ async def ingest_frame(file: UploadFile = File(...)):
 
 def call_llm(prompt):
 
+    if not GROQ_API_KEY:
+        raise ValueError("GROQ_API_KEY is not set")
+
     headers = {
         "Authorization": f"Bearer {GROQ_API_KEY}",
         "Content-Type": "application/json"
@@ -66,7 +69,7 @@ def call_llm(prompt):
     data = {
         "model": "llama-3.3-70b-versatile",
         "messages": [
-            {"role": "system", "content": "You are a robotics planner. Respond ONLY with valid JSON. Do not explain. Do not add text outside JSON."},
+            {"role": "system", "content": "You are a robotics planner. Respond ONLY with valid JSON. Do not explain."},
             {"role": "user", "content": prompt}
         ]
     }
@@ -77,7 +80,15 @@ def call_llm(prompt):
         json=data
     )
 
-    return response.json()["choices"][0]["message"]["content"]
+    print("Groq status:", response.status_code)
+    print("Groq response:", response.text)
+
+    result = response.json()
+
+    if "choices" not in result:
+        raise ValueError(f"Groq error: {result}")
+
+    return result["choices"][0]["message"]["content"]
 
 # -------------------------
 # Token Generator
