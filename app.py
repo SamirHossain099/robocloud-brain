@@ -88,7 +88,15 @@ def call_llm(prompt):
     if "choices" not in result:
         raise ValueError(f"Groq error: {result}")
 
-    return result["choices"][0]["message"]["content"]
+    content = result["choices"][0]["message"]["content"]
+
+    # Remove markdown code fences if present
+    content = content.strip()
+    if content.startswith("```"):
+        content = content.strip("`")
+        content = content.replace("json", "").strip()
+
+    return content
 
 # -------------------------
 # Token Generator
