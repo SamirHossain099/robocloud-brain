@@ -55,7 +55,7 @@ def call_llm(prompt):
     }
 
     data = {
-        "model": "llama3-70b-8192",
+        "model": "llama-3.3-70b-versatile",
         "messages": [
             {"role": "system", "content": "You are a robotics planner. Output JSON only."},
             {"role": "user", "content": prompt}
