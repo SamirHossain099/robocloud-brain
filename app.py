@@ -1,5 +1,6 @@
 # Cloud Brain Gateway
 from fastapi import FastAPI, UploadFile, File
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import requests
 import os
@@ -11,6 +12,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 VISION_URL = os.getenv("VISION_URL")
