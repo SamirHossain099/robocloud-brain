@@ -7,6 +7,7 @@ import os
 import hmac
 import hashlib
 import base64
+import time
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -46,22 +47,42 @@ async def ingest_frame(file: UploadFile = File(...)):
     image_bytes = await file.read()
     image_b64 = base64.b64encode(image_bytes).decode()
 
-    runpod_url = f"https://api.runpod.ai/v2/{os.getenv('RUNPOD_ENDPOINT_ID')}/run"
+    endpoint_id = os.getenv("RUNPOD_ENDPOINT_ID")
+    api_key = os.getenv("RUNPOD_API_KEY")
 
     headers = {
-        "Authorization": f"Bearer {os.getenv('RUNPOD_API_KEY')}",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
 
-    payload = {
+    # Submit job
+    run_url = f"https://api.runpod.ai/v2/{endpoint_id}/run"
+
+    response = requests.post(run_url, headers=headers, json={
         "input": {
             "image": image_b64
         }
-    }
+    })
 
-    response = requests.post(runpod_url, headers=headers, json=payload)
+    job = response.json()
+    job_id = job["id"]
 
-    return response.json()
+    # Poll for result
+    status_url = f"https://api.runpod.ai/v2/{endpoint_id}/status/{job_id}"
+
+    for _ in range(20):  # poll up to 20 times
+        status_response = requests.get(status_url, headers=headers)
+        status_data = status_response.json()
+
+        if status_data["status"] == "COMPLETED":
+            return status_data["output"]
+
+        if status_data["status"] == "FAILED":
+            return {"error": "Vision job failed"}
+
+        time.sleep(0.5)
+
+    return {"error": "Vision job timeout"}
 
 # -------------------------
 # LLM Planner
