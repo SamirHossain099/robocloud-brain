@@ -93,7 +93,7 @@ def call_llm(messages: list):
     }
 
     payload = {
-        "model": "gpt-oss-20b",
+        "model": "llama-3.3-70b-versatile",
         "messages": messages,
         "temperature": 0.2,
         "max_tokens": 800,
