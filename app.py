@@ -93,7 +93,7 @@ def call_llm(messages: list):
     }
 
     payload = {
-        "model": "qwen/qwen3-32b",
+        "model": "gpt-oss-20b",
         "messages": messages,
         "temperature": 0.2,
         "max_tokens": 800,
