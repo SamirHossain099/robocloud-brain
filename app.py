@@ -2,10 +2,10 @@
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import requests
+from typing import List, Dict, Any, Optional
 import os
-import hmac
-import hashlib
+import requests
+import json
 import base64
 import time
 from dotenv import load_dotenv
@@ -24,19 +24,35 @@ app.add_middleware(
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 VISION_URL = os.getenv("VISION_URL")
-TOKEN_SECRET = os.getenv("TOKEN_SECRET", "supersecret")
 
 # -------------------------
-# Models
+# Request / Response Schemas
 # -------------------------
+
+class PlanRequest(BaseModel):
+    global_goal: str
+    current_subgoal: str
+    world_state: Dict[str, Any]
+    progress_metrics: Dict[str, Any]
+    device_profile: Dict[str, Any]
+
+class Action(BaseModel):
+    cmd: str
+    params: Dict[str, Any]
+
+class TerminationCondition(BaseModel):
+    type: str
+    params: Dict[str, Any]
+
+class PlanResponse(BaseModel):
+    subgoal: str
+    actions: List[Action]
+    termination_condition: TerminationCondition
+    replan_after: str
+    confidence: Optional[float] = None
 
 class ASRInput(BaseModel):
     text: str
-
-class TokenRequest(BaseModel):
-    robot_id: str
-    scene: dict
-    intent: str
 
 # -------------------------
 # Vision Inference
@@ -64,80 +80,88 @@ async def ingest_frame(file: UploadFile = File(...)):
 # LLM Planner
 # -------------------------
 
-def call_llm(prompt):
-
-    if not GROQ_API_KEY:
+def call_llm(messages: list):
+    api_key = os.getenv("GROQ_API_KEY")
+    if not api_key:
         raise ValueError("GROQ_API_KEY is not set")
 
+    url = "https://api.groq.com/openai/v1/chat/completions"
+
     headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
 
-    data = {
-        "model": "llama-3.3-70b-versatile",
-        "messages": [
-            {"role": "system", "content": "You are a robotics planner. Respond ONLY with valid JSON. Do not explain."},
-            {"role": "user", "content": prompt}
-        ]
+    payload = {
+        "model": "llama-3.3-70b",
+        "messages": messages,
+        "temperature": 0.2,
+        "max_tokens": 800
     }
 
-    response = requests.post(
-        "https://api.groq.com/openai/v1/chat/completions",
-        headers=headers,
-        json=data
-    )
+    response = requests.post(url, headers=headers, json=payload)
 
-    print("Groq status:", response.status_code)
-    print("Groq response:", response.text)
+    data = response.json()
 
-    result = response.json()
+    if "choices" not in data:
+        raise RuntimeError(f"Invalid Groq response: {data}")
 
-    if "choices" not in result:
-        raise ValueError(f"Groq error: {result}")
+    return data["choices"][0]["message"]["content"]
 
-    content = result["choices"][0]["message"]["content"]
 
-    # Remove markdown code fences if present
-    content = content.strip()
-    if content.startswith("```"):
-        content = content.strip("`")
-        content = content.replace("json", "").strip()
+def build_messages(req: PlanRequest):
 
-    return content
+    system_prompt = """
+You are a robotics planner.
 
-# -------------------------
-# Token Generator
-# -------------------------
+Return ONLY valid JSON with this exact schema:
 
-def sign_token(payload: str):
-    signature = hmac.new(
-        TOKEN_SECRET.encode(),
-        payload.encode(),
-        hashlib.sha256
-    ).digest()
-    return base64.b64encode(signature).decode()
-
-@app.post("/token/next")
-def next_token(request: TokenRequest):
-
-    prompt = f"""
-    Scene: {request.scene}
-    Intent: {request.intent}
-    Generate next action in JSON format:
-    {{
-      "cmd": "move_arc",
-      "v": float,
-      "r": float,
-      "duration_ms": int
-    }}
-    """
-
-    llm_output = call_llm(prompt)
-
-    signature = sign_token(llm_output)
-
-    return {
-        "token": llm_output,
-        "signature": signature
+{
+  "subgoal": string,
+  "actions": [
+    {
+      "cmd": string,
+      "params": object
     }
+  ],
+  "termination_condition": {
+    "type": string,
+    "params": object
+  },
+  "replan_after": "actions_complete" | "on_deviation",
+  "confidence": number
+}
+
+No explanation.
+No markdown.
+No extra text.
+JSON only.
+"""
+
+    user_content = json.dumps({
+        "global_goal": req.global_goal,
+        "current_subgoal": req.current_subgoal,
+        "world_state": req.world_state,
+        "progress_metrics": req.progress_metrics,
+        "device_profile": req.device_profile
+    })
+
+    return [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_content}
+    ]
+
+
+@app.post("/plan", response_model=PlanResponse)
+async def plan(req: PlanRequest):
+
+    messages = build_messages(req)
+
+    llm_output = call_llm(messages)
+
+    try:
+        structured = json.loads(llm_output)
+    except Exception:
+        raise RuntimeError(f"LLM did not return valid JSON: {llm_output}")
+
+    return structured
