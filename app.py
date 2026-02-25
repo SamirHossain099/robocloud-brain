@@ -93,7 +93,7 @@ def call_llm(messages: list):
     }
 
     payload = {
-        "model": "llama-3.3-70b",
+        "model": "llama-4-scout",
         "messages": messages,
         "temperature": 0.2,
         "max_tokens": 800
