@@ -96,7 +96,8 @@ def call_llm(messages: list):
         "model": "llama-3.3-70b-versatile",
         "messages": messages,
         "temperature": 0.2,
-        "max_tokens": 800,
+        "top_p": 0.9,
+        "max_tokens": 300,
         "response_format": {"type": "json_object"}
     }
 
@@ -121,8 +122,12 @@ Return ONLY valid JSON with this exact schema:
   "subgoal": string,
   "actions": [
     {
-      "cmd": string,
-      "params": object
+      "cmd": "move_linear" | "rotate",
+      "params": {
+        "v": number (for move_linear),
+        "omega": number (for rotate),
+        "duration_ms": integer
+      }
     }
   ],
   "termination_condition": {
@@ -133,10 +138,14 @@ Return ONLY valid JSON with this exact schema:
   "confidence": number
 }
 
-No explanation.
-No markdown.
-No extra text.
-JSON only.
+Rules:
+- Use duration_ms (milliseconds), not seconds.
+- For move_linear use param name "v".
+- For rotate use param name "omega".
+- Do NOT invent new parameter names.
+- No explanation.
+- No markdown.
+- JSON only.
 """
 
     user_content = json.dumps({
@@ -162,7 +171,8 @@ async def plan(req: PlanRequest):
 
     try:
         structured = json.loads(llm_output)
-    except Exception:
-        raise RuntimeError(f"LLM did not return valid JSON: {llm_output}")
+        validated = PlanResponse(**structured)
+    except Exception as e:
+        raise RuntimeError(f"Invalid LLM structured output: {e} | Raw: {llm_output}")
 
-    return structured
+    return validated
