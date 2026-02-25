@@ -45,44 +45,20 @@ class TokenRequest(BaseModel):
 @app.post("/ingest/frame")
 async def ingest_frame(file: UploadFile = File(...)):
     image_bytes = await file.read()
-    image_b64 = base64.b64encode(image_bytes).decode()
 
-    endpoint_id = os.getenv("RUNPOD_ENDPOINT_ID")
-    api_key = os.getenv("RUNPOD_API_KEY")
+    runpod_url = "https://v1yuzqqacbzvbi.api.runpod.ai/infer"
 
     headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
+        "Authorization": f"Bearer {os.getenv('RUNPOD_API_KEY')}"
     }
 
-    # Submit job
-    run_url = f"https://api.runpod.ai/v2/{endpoint_id}/run"
+    files = {
+        "file": ("frame.jpg", image_bytes, "image/jpeg")
+    }
 
-    response = requests.post(run_url, headers=headers, json={
-        "input": {
-            "image": image_b64
-        }
-    })
+    response = requests.post(runpod_url, headers=headers, files=files)
 
-    job = response.json()
-    job_id = job["id"]
-
-    # Poll for result
-    status_url = f"https://api.runpod.ai/v2/{endpoint_id}/status/{job_id}"
-
-    for _ in range(20):  # poll up to 20 times
-        status_response = requests.get(status_url, headers=headers)
-        status_data = status_response.json()
-
-        if status_data["status"] == "COMPLETED":
-            return status_data["output"]
-
-        if status_data["status"] == "FAILED":
-            return {"error": "Vision job failed"}
-
-        time.sleep(0.5)
-
-    return {"error": "Vision job timeout"}
+    return response.json()
 
 # -------------------------
 # LLM Planner
