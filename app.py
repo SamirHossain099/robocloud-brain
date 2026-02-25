@@ -96,7 +96,8 @@ def call_llm(messages: list):
         "model": "qwen/qwen3-32b",
         "messages": messages,
         "temperature": 0.2,
-        "max_tokens": 800
+        "max_tokens": 800,
+        "response_format": {"type": "json_object"}
     }
 
     response = requests.post(url, headers=headers, json=payload)
