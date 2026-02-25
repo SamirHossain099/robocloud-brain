@@ -44,11 +44,22 @@ class TokenRequest(BaseModel):
 @app.post("/ingest/frame")
 async def ingest_frame(file: UploadFile = File(...)):
     image_bytes = await file.read()
+    image_b64 = base64.b64encode(image_bytes).decode()
 
-    response = requests.post(
-        VISION_URL,
-        files={"file": image_bytes}
-    )
+    runpod_url = f"https://api.runpod.ai/v2/{os.getenv('RUNPOD_ENDPOINT_ID')}/run"
+
+    headers = {
+        "Authorization": f"Bearer {os.getenv('RUNPOD_API_KEY')}",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "input": {
+            "image": image_b64
+        }
+    }
+
+    response = requests.post(runpod_url, headers=headers, json=payload)
 
     return response.json()
 
